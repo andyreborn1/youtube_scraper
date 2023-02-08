@@ -59,14 +59,14 @@ class YoutubeVideoInfos:
 
     for i in video_infos:
       try:
-        tempo = re.search(r'(\d{1,2}):(\d{1,2})', i.find_element(By.ID, 'text').text).groups()
+        tempo = re.search(r'(\d{1,2})?:?(\d{1,2}):(\d{1,2})', i.find_element(By.ID, 'text').text).groups()
       except:
         while tempo is None:
           print('carregando...')
           time.sleep(1)
           tempo = re.search(r'(\d{1,2}):(\d{1,2})', i.find_element(By.ID, 'text').text).groups()
       
-      duration = int(datetime.timedelta(hours=0, minutes=int(tempo[0]), seconds=int(tempo[1])).total_seconds())
+      duration = int(datetime.timedelta(hours=0 if tempo[0] is None else int(tempo[0]), minutes=int(tempo[1]), seconds=int(tempo[2])).total_seconds())
 
       title = i.find_element(By.ID, 'video-title').text
       video_url=i.find_element(By.ID, 'video-title').get_attribute('href')
@@ -81,7 +81,7 @@ class YoutubeVideoInfos:
       print('Filtrando links')
       self.videos_info_df = self.videos_info_df[
         (self.videos_info_df.duration>=120)
-        &(self.videos_info_df.duration<=720)
+        &(self.videos_info_df.duration<=420)
         ]
 
       self.videos_info_df.title=self.videos_info_df.title.str.lower()
@@ -93,17 +93,19 @@ class YoutubeVideoInfos:
 
       # print(f'quantidade de linhas fim: {self.videos_info_df.shape[0]}')
 
-  def get_files(self):
+  def get_files(self, row_number):
     if not self.videos_info_df.empty:
-      self.videos_info_df.url.to_csv('url_file.txt', index=False, header=False)
-      self.videos_info_df.to_csv('info_file.csv', index=False, sep='\t')
+      df = self.videos_info_df.sample(n=row_number) if row_number<self.videos_info_df.shape[0] else self.videos_info_df.sample(frac=1)
+      
+      df.url.to_csv('url_file.txt', index=False, header=False)
+      df.to_csv('info_file.csv', index=False, sep='\t')
       print('Salvando arquivos')
 
 
 if __name__ == "__main__":
   yvi = YoutubeVideoInfos('C:\\Users\\andyr\\Downloads\\chromedriver_win32\\chromedriver.exe')
-  yvi.get_video_url_by_key(['pisadinha'], 2)
-  # yvi.get_video_url_by_playlist_link('https://www.youtube.com/playlist?list=PLZu-FjTYkoeSkRX_6hTt9o4Z0Qo0VsGp5')
+  # yvi.get_video_url_by_key()
+  yvi.get_video_url_by_playlist_link('https://www.youtube.com/playlist?list=PLUQA9CxjoiUo3wii1nrkGrmW3bopQDHuS')
   yvi.compose_df()
   yvi.filter_df()
-  yvi.get_files()
+  yvi.get_files(500)
