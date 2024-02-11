@@ -6,106 +6,122 @@ import pandas as pd
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 
+
 class YoutubeVideoInfos:
-  def __init__(self, webdriver_path) -> None:
-    self.playlist_search_url = 'https://www.youtube.com/results?search_query={}&sp=EgIQAw%253D%253D'
-    self.videos_info_df = pd.DataFrame(columns=["title", "url", "duration"])
-    self.get_driver(webdriver_path)
-    self.rows=[]
+    def __init__(self) -> None:
+        self.driver = None
+        self.playlist_search_url = 'https://www.youtube.com/results?search_query={}&sp=EgIQAw%253D%253D'
+        self.videos_info_df = pd.DataFrame(columns=["title", "url", "duration"])
+        self.get_driver()
+        self.rows = []
 
-  def get_driver(self, webdriver_path):
-      options = webdriver.ChromeOptions()
-      options.add_argument('--headless')
-      options.add_argument('--no-sandbox')
-      options.add_argument('--disable-dev-shm-usage')
-      options.add_argument("lang=pt-br")
-      options.add_argument("start-maximized")
-      options.add_argument("disable-infobars")
-      options.add_argument("--disable-extensions")
-      options.add_argument("--incognito")
-      options.add_argument("--disable-blink-features=AutomationControlled")
+    def get_driver(self):
+        options = webdriver.ChromeOptions()
+        options.add_argument('--headless')
+        options.add_argument('--no-sandbox')
+        options.add_argument('--disable-dev-shm-usage')
+        options.add_argument("lang=pt-br")
+        options.add_argument("start-maximized")
+        options.add_argument("disable-infobars")
+        options.add_argument("--disable-extensions")
+        options.add_argument("--incognito")
+        options.add_argument("--disable-blink-features=AutomationControlled")
 
-      # options.page_load_strategy = 'eager'
+        # options.page_load_strategy = 'eager'
 
-      self.driver = webdriver.Chrome(webdriver_path, options=options)
+        # self.driver = webdriver.Chrome(webdriver_path, options=options)
+        self.driver = webdriver.Chrome(options=options)
 
-  def get_video_url_by_key(self, key_list, playlist_amount):
-    for key in key_list:
-      print(f"Buscando pela chave '{key}'")
+    def get_video_url_by_key(self, key_list, playlist_amount):
+        for key in key_list:
+            print(f"Buscando pela chave '{key}'")
 
-      self.driver.get(self.playlist_search_url.format(key))
-      time.sleep(3)
-      playlist_links = self.driver.find_elements_by_xpath("//yt-formatted-string[@id='view-more']")[0:playlist_amount]
-      playlist_links = [
-        p.find_element_by_tag_name('a').get_attribute('href')
-        for p in playlist_links
-        ]
+            self.driver.get(self.playlist_search_url.format(key))
+            time.sleep(3)
+            playlist_links = self.driver.find_elements_by_xpath("//yt-formatted-string[@id='view-more']")[
+                             0:playlist_amount]
+            playlist_links = [
+                p.find_element_by_tag_name('a').get_attribute('href')
+                for p in playlist_links
+            ]
 
-      for j, u in enumerate(playlist_links):
-        print(f'Carregando playlist {j+1} de {playlist_amount}')
-        self.get_video_url_by_playlist_link(u)
+            for j, u in enumerate(playlist_links):
+                print(f'Carregando playlist {j + 1} de {playlist_amount}')
+                self.get_video_url_by_playlist_link(u)
 
-    print('Playlists carregadas')
+        print('Playlists carregadas')
 
-  def get_video_url_by_playlist_link(self, playlist_link):
-    self.driver.get(playlist_link)
-    time.sleep(3)
+    def get_video_url_by_playlist_link(self, playlist_link):
+        self.driver.get(playlist_link)
+        time.sleep(5)
 
-    for i in range(5):
-      self.driver.find_element_by_xpath('//body').send_keys(Keys.END)
-      time.sleep(1) 
+        pllst = True if '/playlist?' in playlist_link else False
+        class_cont = "'style-scope ytd-playlist-video-list-renderer'" if pllst else "'style-scope ytd-playlist-panel-renderer'"
+        tag = "" if pllst else "-panel"
+        vt = 'video-title' if pllst else 'wc-endpoint'
 
-    video_infos= self.driver.find_elements(By.XPATH, "//ytd-playlist-video-renderer[@class='style-scope ytd-playlist-video-list-renderer']")
+        tela = self.driver.find_element(By.XPATH, "//body")
 
-    for i in video_infos:
-      try:
-        tempo = re.search(r'(\d{1,2})?:?(\d{1,2}):(\d{1,2})', i.find_element(By.ID, 'text').text).groups()
-      except:
-        while tempo is None:
-          print('carregando...')
-          time.sleep(1)
-          tempo = re.search(r'(\d{1,2}):(\d{1,2})', i.find_element(By.ID, 'text').text).groups()
-      
-      duration = int(datetime.timedelta(hours=0 if tempo[0] is None else int(tempo[0]), minutes=int(tempo[1]), seconds=int(tempo[2])).total_seconds())
+        if pllst:
+            for i in range(5):
+                tela.send_keys(Keys.END)
+                time.sleep(1)
 
-      title = i.find_element(By.ID, 'video-title').text
-      video_url=i.find_element(By.ID, 'video-title').get_attribute('href')
-      self.rows.append({"title": title, "url": video_url,"duration": duration})
+        xpath = f"//ytd-playlist{tag}-video-renderer[@class={class_cont}]"
 
-  def compose_df(self):
-    self.videos_info_df=pd.DataFrame(self.rows)
+        video_infos = self.driver.find_elements(By.XPATH, xpath)
 
-  def filter_df(self):
-    # print(f'quantidade de linhas inicio: {self.videos_info_df.shape[0]}')
-    if not self.videos_info_df.empty:
-      print('Filtrando links')
-      self.videos_info_df = self.videos_info_df[
-        (self.videos_info_df.duration>=120)
-        &(self.videos_info_df.duration<=420)
-        ]
+        for i in video_infos:
+            try:
+                tempo = re.search(r'(\d{1,2})?:?(\d{1,2}):(\d{1,2})', i.find_element(By.ID, 'text').text).groups()
+            except:
+                while tempo is None:
+                    print('carregando...')
+                    time.sleep(1)
+                    tempo = re.search(r'(\d{1,2}):(\d{1,2})', i.find_element(By.ID, 'text').text).groups()
 
-      self.videos_info_df.title=self.videos_info_df.title.str.lower()
-      self.videos_info_df=self.videos_info_df[
-        ~self.videos_info_df.title.str.contains(r'ao vivo|aovivo|dvd', regex=True)
-        ]
+            duration = int(datetime.timedelta(hours=0 if tempo[0] is None else int(tempo[0]), minutes=int(tempo[1]),
+                                              seconds=int(tempo[2])).total_seconds())
 
-      self.videos_info_df=self.videos_info_df.drop_duplicates(subset=['title'])
+            title = i.find_element(By.ID, 'video-title').text
+            video_url = i.find_element(By.ID, vt).get_attribute('href')
+            self.rows.append({"title": title, "url": video_url, "duration": duration})
 
-      # print(f'quantidade de linhas fim: {self.videos_info_df.shape[0]}')
+    def compose_df(self):
+        self.videos_info_df = pd.DataFrame(self.rows)
 
-  def get_files(self, row_number):
-    if not self.videos_info_df.empty:
-      df = self.videos_info_df.sample(n=row_number) if row_number<self.videos_info_df.shape[0] else self.videos_info_df.sample(frac=1)
-      
-      df.url.to_csv('url_file.txt', index=False, header=False)
-      df.to_csv('info_file.csv', index=False, sep='\t')
-      print('Salvando arquivos')
+    def filter_df(self):
+        # print(f'quantidade de linhas inicio: {self.videos_info_df.shape[0]}')
+        if not self.videos_info_df.empty:
+            print('Filtrando links')
+            self.videos_info_df = self.videos_info_df[
+                (self.videos_info_df.duration >= 120)
+                & (self.videos_info_df.duration <= 420)
+                ]
+
+            self.videos_info_df.title = self.videos_info_df.title.str.lower()
+            self.videos_info_df = self.videos_info_df[
+                ~self.videos_info_df.title.str.contains(r'ao vivo|aovivo|dvd', regex=True)
+            ]
+
+            self.videos_info_df = self.videos_info_df.drop_duplicates(subset=['title'])
+
+            # print(f'quantidade de linhas fim: {self.videos_info_df.shape[0]}')
+
+    def get_files(self, row_number):
+        if not self.videos_info_df.empty:
+            df = self.videos_info_df.sample(n=row_number) if row_number < self.videos_info_df.shape[
+                0] else self.videos_info_df.sample(frac=1)
+
+            df.url.to_csv('url_file.txt', index=False, header=False)
+            df.to_csv('info_file.csv', index=False, sep='\t')
+            print('Salvando arquivos')
 
 
 if __name__ == "__main__":
-  yvi = YoutubeVideoInfos('C:\\Users\\andyr\\Downloads\\chromedriver_win32\\chromedriver.exe')
-  # yvi.get_video_url_by_key()
-  yvi.get_video_url_by_playlist_link('https://www.youtube.com/playlist?list=PLUQA9CxjoiUo3wii1nrkGrmW3bopQDHuS')
-  yvi.compose_df()
-  yvi.filter_df()
-  yvi.get_files(500)
+    yvi = YoutubeVideoInfos()
+    # yvi.get_video_url_by_key()
+    yvi.get_video_url_by_playlist_link('https://www.youtube.com/watch?v=3srn-kUIDeU&list=RD3srn-kUIDeU&index=2')
+    yvi.compose_df()
+    yvi.filter_df()
+    yvi.get_files(500)
